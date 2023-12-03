@@ -1,0 +1,420 @@
+{
+    "$schema": "https://www.krakend.io/schema/v3.json",
+    "version": 3,
+    "name": "NestJS KrakenD - API Gateway",
+    "timeout": "1500000ms",
+    "cache_ttl": "300s",
+    "output_encoding": "json",
+    "port": 8080,
+    "extra_config": {
+        "security/bot-detector": {
+            "allow": ["MyAndroidClient/1.0", "Pingdom.com_bot_version_1.1"],
+            "deny": ["a", "b"],
+            "patterns": [
+                "(Pingdom.com_bot_version_).*",
+                "(facebookexternalhit)/.*"
+            ],
+            "cache_size": 10000,
+            "empty_user_agent_is_bot": true
+        },
+        "security/cors": {
+          "allow_origins": [
+            "*"
+          ],
+          "allow_methods": [
+            "GET",
+            "HEAD",
+            "POST"
+          ],
+          "expose_headers": [
+            "Content-Length",
+            "Content-Type"
+          ],
+          "allow_headers": [
+            "Accept-Language",
+            "Authorization"
+          ],
+          "max_age": "12h",
+          "allow_credentials": false,
+          "debug": false
+        },
+        "router": {
+            "return_error_msg": true
+         }
+    },
+    "endpoints": [
+        {
+            "endpoint": "/gateway/v1/test-cache",
+            "method": "GET",
+            "output_encoding": "no-op",
+            "backend": [
+                {
+                    "url_pattern": "/users",
+                    "method": "GET",
+                    "host": [
+                        "https://jsonplaceholder.typicode.com"
+                    ],
+                    "disable_host_sanitize": false,
+                    "extra_config": {
+                        "qos/http-cache": {
+                            "shared": true
+                        },
+                        "modifier/martian": {
+                            "header.Modifier": {
+                                "scope": [
+                                    "response"
+                                ],
+                                "name": "Cache-Control",
+                                "value": "max-age=10, public",
+                                "@comment": "We will change the max-age policy before KrakenD checks the content for caching. Now content is cached 60 seconds."
+                            }
+                        }
+                    }
+                }
+            ],
+            "extra_config": {
+                "qos/ratelimit/router": {
+                    "client_max_rate": 15,
+                    "client_capacity": 15,
+                    "strategy": "ip",
+                    "every": "1m"
+                }
+            },
+            "input_query_strings": [
+                "*"
+            ],
+            "input_headers": [
+                "*"
+            ]
+        },
+        {
+            "endpoint": "/gateway/v1/test-group-data",
+            "method": "GET",
+            "backend": [
+                {
+                    "url_pattern": "test-1/service-1",
+                    "encoding": "safejson",
+                    "method": "GET",
+                    "host": [
+                        "192.168.13.42:3000"
+                    ],
+                    "disable_host_sanitize": false,
+                    "group": "user",
+                    "extra_config": {
+                        "qos/http-cache": {
+                            "shared": true
+                        },
+                        "modifier/martian": {
+                            "header.Modifier": {
+                                "scope": [
+                                    "response"
+                                ],
+                                "name": "Cache-Control",
+                                "value": "max-age=15, public",
+                                "@comment": "We will change the max-age policy before KrakenD checks the content for caching. Now content is cached 60 seconds."
+                            }
+                        }
+                    }
+                },
+                {
+                    "url_pattern": "test-1/service-2",
+                    "method": "GET",
+                    "host": [
+                        "192.168.13.42:3001"
+                    ],
+                    "disable_host_sanitize": false,
+                    "group": "post"
+
+                }
+            ],
+            "concurrent_calls": 2,
+            "extra_config": {
+                "auth/validator": {
+                    "alg": "HS256",
+                    "cache": false,
+                    "disable_jwk_security": true,
+                    "operation_debug": true,
+                    "roles": ["manager","admin"],
+                    "jwk_url": "http://192.168.13.42:8081/symmetric.json"
+                },
+                "qos/ratelimit/router": {
+                    "client_max_rate": 2,
+                    "strategy": "header",
+                    "key": "Authorization",
+                    "every": "1s"
+                }
+            },
+            "input_query_strings": [
+                "*"
+            ],
+            "input_headers": [
+                "*"
+            ]
+        },
+        {
+            "endpoint": "/gateway/v1/test-traffic-data",
+            "method": "GET",
+            "backend": [
+                {
+                    "url_pattern": "test-1/v1-traffic",
+                    "method": "GET",
+                    "host": [
+                        "192.168.13.42:3000"
+                    ],
+                    "disable_host_sanitize": false
+                },
+                {
+                    "url_pattern": "test-1/v2-traffic",
+                    "method": "GET",
+                    "host": [
+                        "192.168.13.42:3000"
+                    ],
+                    "disable_host_sanitize": false,
+                    "extra_config": {
+                        "proxy": {
+                            "shadow": true
+                        }
+                    }
+                }
+            ],
+            "extra_config": {
+                "qos/ratelimit/router": {
+                    "client_max_rate": 15,
+                    "client_capacity": 15,
+                    "strategy": "ip",
+                    "every": "1m"
+                }
+            },
+            "input_query_strings": [
+                "*"
+            ],
+            "input_headers": [
+                "*"
+            ]
+        },
+        {
+            "endpoint": "/gateway/v1/users/{id}",
+            "output_encoding": "json",
+            "backend": [
+                {
+                    "@comment": "This is the index position 0",
+                    "url_pattern": "/test-1/v2-random-id/{id}",
+                    "method": "GET",
+                    "host": [
+                        "192.168.13.42:3000"
+                    ],
+                    "disable_host_sanitize": false
+                },
+                {
+                    "method": "GET",
+                    "@comment": "This is the index position 1",
+                    "host": [
+                        "https://jsonplaceholder.typicode.com"
+                    ],
+                    "@comment2": "resp0_ is the response of index position 0",
+                    "url_pattern": "/users/{resp0_id}"
+                }
+            ],
+            "extra_config": {
+                "proxy": {
+                    "sequential": true
+                }
+            },
+            "input_query_strings": [
+                "*"
+            ]
+        },
+        {
+            "endpoint": "/gateway/v1/authen",
+            "output_encoding": "json",
+            "backend": [
+                {
+                    "method": "GET",
+                    "url_pattern": "/posts/3",
+                    "host": ["https://jsonplaceholder.typicode.com"]
+                  }
+            ],
+            "extra_config": {
+                "qos/ratelimit/router": {
+                    "client_max_rate": 2,
+                    "strategy": "header",
+                    "key": "Authorization",
+                    "every": "10s"
+                }
+            },
+            "input_query_strings": [
+                "*"
+            ],
+            "input_headers": [
+                "*"
+            ]
+        },
+        {
+            "endpoint": "/gateway/v1/circuit-breaker",
+            "method": "GET",
+            "backend": [
+                {
+                    "url_pattern": "test-1/circuit-breaker",
+                    "method": "GET",
+                    "host": [
+                        "192.168.13.42:3000"
+                    ],
+                    "disable_host_sanitize": false,
+                    "extra_config": {
+                        "qos/circuit-breaker": {
+                            "interval": 10,
+                            "timeout": 10,
+                            "max_errors": 3,
+                            "name": "cb-myendpoint-1",
+                            "log_status_change": true
+                        }
+                    }
+                }
+            ],
+            "input_query_strings": [
+                "*"
+            ],
+            "input_headers": [
+                "*"
+            ]
+        },
+        {
+            "endpoint": "/gateway/v1/bot-detection",
+            "method": "GET",
+            "backend": [
+                {
+                    "url_pattern": "test-1/bot-detection",
+                    "method": "GET",
+                    "host": [
+                        "192.168.13.42:3000"
+                    ],
+                    "disable_host_sanitize": false
+                }
+            ],
+            "input_query_strings": [
+                "*"
+            ],
+            "input_headers": [
+                "*"
+            ]
+        },
+        {
+            "endpoint": "/gateway/v1/validate-collection",
+            "method": "POST",
+            "backend": [
+                {
+                    "url_pattern": "test-1/validate-collection",
+                    "method": "POST",
+                    "host": [
+                        "192.168.13.42:3000"
+                    ],
+                    "disable_host_sanitize": false
+                    
+                }
+            
+            ],
+            "extra_config":{
+                "validation/json-schema": {
+                  "type": "object",
+                  "required": ["number", "street_name", "street_type"],
+                  "properties": {
+                    "number":      { "type": "number" },
+                    "street_name": { "type": "string" },
+                    "street_type": { "type": "string",
+                                     "enum": ["Street", "Avenue", "Boulevard"]
+                                   }
+                  }
+                }
+            },
+            "input_query_strings": [
+                "*"
+            ],
+            "input_headers": [
+                "*"
+            ]
+        },
+        {
+            "endpoint": "/gateway/v1/validate-collection-response",
+            "method": "GET",
+            "backend": [
+                {
+                    "url_pattern": "test-1/validate-collection-response",
+                    "method": "GET",
+                    "host": [
+                        "192.168.13.42:3000"
+                    ],
+                    "disable_host_sanitize": false,
+                    "extra_config": {
+                        "plugin/req-resp-modifier": {
+                          "name": [
+                            "response-schema-validator"
+                          ],
+                          "response-schema-validator": {
+                            "schema": {
+                              "type": "object",
+                              "properties": {
+                                "user": {
+                                  "type": "object",
+                                  "properties": {
+                                    "username": {
+                                      "type": "string"
+                                    },
+                                    "user_id": {
+                                      "type": "number"
+                                    },
+                                    "status": {
+                                        "type": "string",
+                                        "enum": ["registered", "banned"]
+                                    }
+                                  },
+                                  "required": [
+                                    "username",
+                                    "user_id"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "user"
+                              ]
+                            },
+                            "error": {
+                              "body": "We couldn't process you request, try again later.",
+                              "status": 401
+                            }
+                          }
+                        }
+                      }
+                }
+            ],
+          
+            "input_query_strings": [
+                "*"
+            ],
+            "input_headers": [
+                "*"
+            ]
+        },
+        {
+            "endpoint": "/gateway/v1/concurrent-requests",
+            "method": "GET",
+            "concurrent_calls": 3,
+            "backend": [
+                {
+                    "url_pattern": "test-1/concurrent-requests",
+                    "method": "GET",
+                    "host": [
+                        "192.168.13.42:3000",
+                        "192.168.13.42:3001"
+                    ],
+                    "disable_host_sanitize": false
+                }
+            ],
+            "input_query_strings": [
+                "*"
+            ],
+            "input_headers": [
+                "*"
+            ]
+        }
+    ]
+}

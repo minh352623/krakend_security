@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+    <button onClick="testCache()">click</button>
+    <script>
+        async function testCache(){
+            const data = await fetch("http://localhost:8080/gateway/v1/test-group-data");
+            const json = await data.json()
+            console.log("🚀 ~ file: index.html:14 ~ testCache ~ json:", json)
+            
+
+        }
+    </script>
+</body>
+</html>
